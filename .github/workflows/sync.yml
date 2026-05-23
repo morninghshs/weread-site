@@ -4,19 +4,27 @@ on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
-  sync:
+  sync-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Fetch latest data
+      - name: Fetch latest WeRead data
         env:
           WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
         run: node fetch.js
@@ -26,15 +34,23 @@ jobs:
           WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
         run: node build-v3.js
 
-      - name: Copy output
+      - name: Copy output to repo root
         run: |
           cp /home/node/.openclaw/workspace/weread-website/index.html ./
           cp /home/node/.openclaw/workspace/weread-data/all-data.json ./
 
-      - name: Deploy to GitHub Pages
+      - name: Commit changes
+        run: |
+          git config user.name "morninghshs"
+          git config user.email "morninghshs@users.noreply.github.com"
+          git add index.html all-data.json
+          git diff --exit-code --quiet || git commit -m "Sync: $(date '+%Y-%m-%d %H:%M')"
+          git push || echo "No changes to push"
+
+      - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Upload artifact
+      - name: Upload to Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'index.html'
@@ -42,12 +58,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Commit changes
-        if: always()
-        run: |
-          git config user.name "morninghshs"
-          git config user.email "morninghshs@users.noreply.github.com"
-          git add index.html all-data.json
-          git diff --exit-code --quiet || git commit -m "Sync: $(date '+%Y-%m-%d %H:%M')"
-          git push || true
