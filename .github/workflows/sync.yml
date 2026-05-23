@@ -11,13 +11,10 @@ jobs:
   sync-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       pages: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,13 +22,9 @@ jobs:
           node-version: '20'
 
       - name: Fetch latest WeRead data
-        env:
-          WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
         run: node fetch.js
 
       - name: Build website
-        env:
-          WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
         run: node build-v3.js
 
       - name: Copy output to repo root
@@ -45,7 +38,7 @@ jobs:
           git config user.email "morninghshs@users.noreply.github.com"
           git add index.html all-data.json
           git diff --exit-code --quiet || git commit -m "Sync: $(date '+%Y-%m-%d %H:%M')"
-          git push || echo "No changes to push"
+          git push || echo "No changes"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
