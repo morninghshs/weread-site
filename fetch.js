@@ -1,212 +1,121 @@
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
+var fs = require('fs');
+var https = require('https');
 
-const API_KEY = 'wrk-FAezgfEkSVOCgnbDQIzNGwAA';
-const GATEWAY = 'https://i.weread.qq.com/api/agent/gateway';
-const DATA_DIR = '/home/node/.openclaw/workspace/weread-data';
+var API_KEY = 'wrk-FAezgfEkSVOCgnbDQIzNGwAA';
+var DATA_DIR = '/home/node/.openclaw/workspace/weread-data';
+var OUT_FILE = 'all-data.json';
 
-function post(apiName, body = {}) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({ api_name: apiName, skill_version: '1.0.3', ...body });
-    const url = new URL(GATEWAY);
-    const opts = {
-      hostname: url.hostname,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-      },
+function post(apiName, body) {
+  return new Promise(function(resolve, reject) {
+    var payload = JSON.stringify({ api_name: apiName, skill_version: '1.0.3' });
+    Object.keys(body || {}).forEach(function(k){ payload = JSON.stringify(JSON.parse(payload).concat ? payload : Object.assign(JSON.parse(payload), {[k]: body[k]})); });
+    var p2 = JSON.stringify(Object.assign({ api_name: apiName, skill_version: '1.0.3' }, body));
+    var url = new URL('https://i.weread.qq.com/api/agent/gateway');
+    var opts = {
+      hostname: url.hostname, path: url.pathname, method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + API_KEY, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(p2) }
     };
-    const req = https.request(opts, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error(`JSON parse error: ${data.slice(0, 200)}`)); }
-      });
+    var req = https.request(opts, function(res) {
+      var d = '';
+      res.on('data', function(c){ d += c; });
+      res.on('end', function(){ try { resolve(JSON.parse(d)); } catch(e) { reject(new Error(d.slice(0,100))); } });
     });
     req.on('error', reject);
-    req.write(payload);
+    req.write(p2);
     req.end();
   });
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function fetchAllNotebooks() {
-  console.log('Fetching all notebooks...');
-  let allBooks = [];
-  let hasMore = true;
-  let lastSort = 0;
-  let page = 0;
-
-  while (hasMore) {
-    page++;
-    const params = { count: 100 };
-    if (lastSort) params.lastSort = lastSort;
-    const data = await post('/user/notebooks', params);
-    console.log(`  Page ${page}: got ${data.books?.length || 0} books`);
-    if (data.books) allBooks.push(...data.books);
-    hasMore = data.hasMore === 1;
-    if (hasMore && data.books?.length > 0) {
-      lastSort = data.books[data.books.length - 1].sort;
-    }
-    await sleep(300);
-    if (page > 20) break; // safety
-  }
-
-  console.log(`  Total: ${allBooks.length} books with notes`);
-  return allBooks;
-}
-
-async function fetchBookReviews(bookId, bookTitle) {
-  console.log(`  Fetching reviews for: ${bookTitle} (${bookId})`);
-  let allReviews = [];
-  let hasMore = true;
-  let synckey = 0;
-  let page = 0;
-
-  while (hasMore) {
-    page++;
-    const params = { bookid: bookId, count: 100 };
-    if (synckey) params.synckey = synckey;
-    const data = await post('/review/list/mine', params);
-    if (data.reviews) allReviews.push(...data.reviews);
-    hasMore = data.hasMore === 1;
-    if (hasMore) synckey = data.synckey;
-    await sleep(200);
-    if (page > 20) break;
-  }
-
-  console.log(`    Got ${allReviews.length} reviews`);
-  return allReviews.map(r => ({
-    reviewId: r.review?.reviewId,
-    content: r.review?.content,
-    htmlContent: r.review?.htmlContent,
-    star: r.review?.star,
-    chapterName: r.review?.chapterName,
-    isFinish: r.review?.isFinish,
-    createTime: r.review?.createTime,
-    range: r.review?.range,
-    abstract: r.review?.abstract,
-  }));
-}
-
-async function fetchBookmarks(bookId, bookTitle) {
-  console.log(`  Fetching bookmarks for: ${bookTitle} (${bookId})`);
-  try {
-    const data = await post('/book/bookmarklist', { bookId });
-    const bookmarks = data.updated || [];
-    console.log(`    Got ${bookmarks.length} bookmarks`);
-    return bookmarks.map(b => ({
-      bookmarkId: b.bookmarkId,
-      markText: b.markText,
-      chapterUid: b.chapterUid,
-      createTime: b.createTime,
-      range: b.range,
-      colorStyle: b.colorStyle,
-    }));
-  } catch (e) {
-    console.log(`    Error: ${e.message}`);
-    return [];
-  }
-}
-
-async function fetchBookInfo(bookId) {
-  try {
-    return await post('/book/info', { bookId });
-  } catch (e) {
-    return null;
-  }
-}
-
-async function fetchReadData() {
-  console.log('Fetching reading stats...');
-  try {
-    const data = await post('/readdata/detail', { mode: 'overall' });
-    console.log(`  Got reading stats`);
-    return data;
-  } catch (e) {
-    console.log(`  Error: ${e.message}`);
-    return null;
-  }
-}
+function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
 
 async function main() {
-  // 1. Fetch reading stats
-  const readData = await fetchReadData();
+  var allBooks = [];
+  var hasMore = true;
+  var lastSort = 0;
+  var page = 0;
+  console.log('Fetching notebooks...');
+  while (hasMore) {
+    page++;
+    var params = { count: 100 };
+    if (lastSort) params.lastSort = lastSort;
+    var data = await post('/user/notebooks', params);
+    if (data.books) allBooks.push.apply(allBooks, data.books);
+    hasMore = data.hasMore === 1;
+    if (hasMore && data.books && data.books.length > 0) lastSort = data.books[data.books.length-1].sort;
+    await sleep(300);
+    if (page > 20) break;
+  }
+  console.log('Total books: ' + allBooks.length);
 
-  // 2. Fetch all notebooks
-  const books = await fetchAllNotebooks();
+  var booksWithReviews = allBooks.filter(function(b){ return (b.reviewCount || 0) > 0; });
+  console.log('Books with reviews: ' + booksWithReviews.length);
 
-  // 3. For each book with reviews, fetch detailed data
-  const booksWithReviews = books.filter(b => (b.reviewCount || 0) > 0);
-  console.log(`\nBooks with reviews: ${booksWithReviews.length}`);
-
-  const detailedBooks = [];
-  for (let i = 0; i < booksWithReviews.length; i++) {
-    const book = booksWithReviews[i];
-    const [reviews, bookmarks] = await Promise.all([
-      fetchBookReviews(book.bookId, book.book?.title),
-      fetchBookmarks(book.bookId, book.book?.title),
-    ]);
-
+  var detailedBooks = [];
+  for (var i = 0; i < booksWithReviews.length; i++) {
+    var book = booksWithReviews[i];
+    console.log('  ' + (i+1) + '/' + booksWithReviews.length + ': ' + (book.book && book.book.title));
+    // fetch reviews
+    var allReviews = [];
+    var hasMore2 = true;
+    var synckey = 0;
+    while (hasMore2) {
+      var params2 = { bookid: book.bookId, count: 100 };
+      if (synckey) params2.synckey = synckey;
+      var rd = await post('/review/list/mine', params2);
+      if (rd.reviews) allReviews.push.apply(allReviews, rd.reviews);
+      hasMore2 = rd.hasMore === 1;
+      if (hasMore2) synckey = rd.synckey;
+      await sleep(200);
+    }
+    // fetch bookmarks
+    var bookmarks = [];
+    try {
+      var bdata = await post('/book/bookmarklist', { bookId: book.bookId });
+      if (bdata.updated) bookmarks = bdata.updated;
+    } catch(e) {}
     detailedBooks.push({
       bookId: book.bookId,
-      title: book.book?.title,
-      author: book.book?.author,
-      cover: book.book?.cover,
+      title: book.book && book.book.title,
+      author: book.book && book.book.author,
+      cover: book.book && book.book.cover,
       reviewCount: book.reviewCount,
       noteCount: book.noteCount,
       bookmarkCount: book.bookmarkCount,
       readingProgress: book.readingProgress,
       markedStatus: book.markedStatus,
-      reviews: reviews,
-      bookmarks: bookmarks,
+      sort: book.sort,
+      reviews: allReviews.map(function(r){ return { reviewId: r.review && r.review.reviewId, content: r.review && r.review.content, chapterName: r.review && r.review.chapterName, star: r.review && r.review.star, createTime: r.review && r.review.createTime, abstract: r.review && r.review.abstract }; }),
+      bookmarks: bookmarks.map(function(b){ return { bookmarkId: b.bookmarkId, markText: b.markText, chapterUid: b.chapterUid, createTime: b.createTime, range: b.range, colorStyle: b.colorStyle }; })
     });
-
-    console.log(`  Progress: ${i + 1}/${booksWithReviews.length}`);
     await sleep(200);
   }
 
-  // Also include books with only bookmarks (no reviews) for completeness
-  const booksNoReviews = books.filter(b => (b.reviewCount || 0) === 0);
-  for (const book of booksNoReviews) {
+  // Add books without reviews
+  allBooks.filter(function(b){ return (b.reviewCount || 0) === 0; }).forEach(function(book) {
     detailedBooks.push({
-      bookId: book.bookId,
-      title: book.book?.title,
-      author: book.book?.author,
-      cover: book.book?.cover,
-      reviewCount: book.reviewCount,
-      noteCount: book.noteCount,
-      bookmarkCount: book.bookmarkCount,
-      readingProgress: book.readingProgress,
-      markedStatus: book.markedStatus,
-      reviews: [],
-      bookmarks: [],
+      bookId: book.bookId, title: book.book && book.book.title,
+      author: book.book && book.book.author, cover: book.book && book.book.cover,
+      reviewCount: book.reviewCount, noteCount: book.noteCount, bookmarkCount: book.bookmarkCount,
+      readingProgress: book.readingProgress, markedStatus: book.markedStatus, sort: book.sort,
+      reviews: [], bookmarks: []
     });
-  }
+  });
 
-  // 4. Compile all data
-  const allData = {
+  // Fetch read stats
+  var readData = null;
+  try { readData = await post('/readdata/detail', { mode: 'overall' }); } catch(e) {}
+
+  var allData = {
     readData: readData,
     books: detailedBooks,
     totalBooks: detailedBooks.length,
-    totalReviews: detailedBooks.reduce((s, b) => s + (b.reviews?.length || 0), 0),
-    totalBookmarks: detailedBooks.reduce((s, b) => s + (b.bookmarks?.length || 0), 0),
-    exportedAt: new Date().toISOString(),
+    totalReviews: detailedBooks.reduce(function(s,b){ return s+(b.reviews&&b.reviews.length||0); }, 0),
+    totalBookmarks: detailedBooks.reduce(function(s,b){ return s+(b.bookmarks&&b.bookmarks.length||0); }, 0),
+    exportedAt: new Date().toISOString()
   };
 
-  fs.writeFileSync(path.join(DATA_DIR, 'all-data.json'), JSON.stringify(allData, null, 2));
-  console.log(`\nDone!`);
-  console.log(`  Total books: ${allData.totalBooks}`);
-  console.log(`  Total reviews/想法: ${allData.totalReviews}`);
-  console.log(`  Total bookmarks/划线: ${allData.totalBookmarks}`);
-  console.log(`  Data file: ${path.join(DATA_DIR, 'all-data.json')}`);
-  console.log(`  File size: ${(fs.statSync(path.join(DATA_DIR, 'all-data.json')).size / 1024 / 1024).toFixed(2)} MB`);
+  fs.writeFileSync(OUT_FILE, JSON.stringify(allData, null, 2));
+  console.log('Done! Written to ' + OUT_FILE);
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch(function(e){ console.error(e); process.exit(1); });

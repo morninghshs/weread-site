@@ -27,10 +27,10 @@ jobs:
       - name: Build website
         run: node build-v3.js
 
-      - name: Copy output to repo root
+      - name: Prepare files
         run: |
-          cp /home/node/.openclaw/workspace/weread-website/index.html ./
-          cp /home/node/.openclaw/workspace/weread-data/all-data.json ./
+          cp /home/node/.openclaw/workspace/weread-website/index.html ./index.html
+          cp /home/node/.openclaw/workspace/weread-data/all-data.json ./all-data.json
 
       - name: Commit changes
         run: |
