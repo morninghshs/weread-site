@@ -24,32 +24,14 @@ jobs:
       - name: Build website
         env:
           WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
+        run: node build-v3.js
+
+      - name: Copy output
         run: |
-          node build-v3.js
+          cp /home/node/.openclaw/workspace/weread-website/index.html ./
+          cp /home/node/.openclaw/workspace/weread-data/all-data.json ./
 
-      - name: Commit & Push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "morninghshs"
-          git config user.email "morninghshs@users.noreply.github.com"
-          git add index.html all-data.json
-          git diff --exit-code --quiet && echo "No changes" || git commit -m "Sync: $(date '+%Y-%m-%d %H:%M')"
-          git push
-
-  deploy:
-    needs: sync
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          persist-credentials: false
-
-      - name: Setup Pages
+      - name: Deploy to GitHub Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
@@ -60,3 +42,12 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Commit changes
+        if: always()
+        run: |
+          git config user.name "morninghshs"
+          git config user.email "morninghshs@users.noreply.github.com"
+          git add index.html all-data.json
+          git diff --exit-code --quiet || git commit -m "Sync: $(date '+%Y-%m-%d %H:%M')"
+          git push || true
